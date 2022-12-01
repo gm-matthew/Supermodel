@@ -1,7 +1,7 @@
 /**
  ** Supermodel
  ** A Sega Model 3 Arcade Emulator.
- ** Copyright 2011 Bart Trzynadlowski, Nik Henson
+ ** Copyright 2003-2022 by The Supermodel Team
  **
  ** This file is part of Supermodel.
  **
@@ -54,7 +54,7 @@
 #endif // DEBUGGER_HASLOGGER
 
 #ifdef DEBUGGER_HASTHREAD
-#include "OSD/Thread.h"
+#include <mutex>
 #endif // DEBUGGER_HASTHREAD
 
 #ifndef stricmp
@@ -119,7 +119,7 @@ namespace Debugger
 		bool m_breakUser;
 
 #ifdef DEBUGGER_HASTHREAD
-		CMutex *m_mutex;
+		std::mutex m_mutex;
 		CCPUDebug *m_primaryCPU;
 #endif
 

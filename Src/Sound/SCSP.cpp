@@ -2,7 +2,7 @@
 /**
  ** Supermodel
  ** A Sega Model 3 Arcade Emulator.
- ** Copyright 2011 Bart Trzynadlowski, Nik Henson
+ ** Copyright 2003-2022 by The Supermodel Team
  **
  ** This file is part of Supermodel.
  **
@@ -67,13 +67,13 @@ Anyways credit to R. Belmont and ElSemi for the code, and for being awesome emul
 
 #include "Supermodel.h"
 #include "SCSPDSP.h"
-#include "OSD/Thread.h"
 
 
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <cmath>
+#include <mutex>
 
 
 static const Util::Config::Node *s_config = 0;
@@ -123,7 +123,7 @@ static const double srate=44100;
 #define DWORD UINT32
 #endif
 
-static CMutex *MIDILock;	// for safe access to the MIDI FIFOs
+static std::mutex MIDILock;	// for safe access to the MIDI FIFOs
 static int (*Run68kCB)(int cycles);
 static void (*Int68kCB)(int irq);
 static void (*RetIntCB)();
@@ -356,13 +356,13 @@ void CheckPendingIRQ()
 	 * NOTE: I don't think a mutex is really needed here, so I've disabled
 	 * this critical section.
 	 */
-	//if (g_Config.multiThreaded)
-	//	MIDILock->Lock();
+	//if (s_multiThreaded)
+	//	MIDILock.lock();
 
 	if(MidiW!=MidiR)
 	{
-		//if (g_Config.multiThreaded)
-		//	MIDILock->Unlock();
+		//if (s_multiThreaded)
+		//	MIDILock.unlock();
 		
 		//SCSP.data[0x20/2]|=0x8;	//Hold midi line while there are commands pending
 
@@ -374,8 +374,8 @@ void CheckPendingIRQ()
 		pend |= 8;
 	}
 	
-	//if (g_Config.multiThreaded)
-	//	MIDILock->Unlock();
+	//if (s_multiThreaded)
+	//	MIDILock.unlock();
 	
 	if(!pend)
 		return;
@@ -765,13 +765,6 @@ bool SCSP_Init(const Util::Config::Node &config, int n)
 	TimCnt[1] = 0xffff;
 	TimCnt[2] = 0xffff;
 	
-	// MIDI FIFO mutex
-	MIDILock = CThread::CreateMutex();
-	if (NULL == MIDILock)
-	{
-		return ErrorLog("Unable to create MIDI mutex!");
-	}
-	
 	return OKAY;
 }
 
@@ -956,7 +949,7 @@ void SCSP_UpdateRegR(int reg)
 		 * MIDI FIFO critical section!
 		 */
 		if (s_multiThreaded)
-			MIDILock->Lock();
+			MIDILock.lock();
 
 		v |= MidiStack[MidiR];
 		//printf("read MIDI\n");
@@ -971,7 +964,7 @@ void SCSP_UpdateRegR(int reg)
 		SCSP->data[0x4 / 2] = v;
 
 		if (s_multiThreaded)
-			MIDILock->Unlock();
+			MIDILock.unlock();
 	}
 	break;
 	case 8:
@@ -1742,7 +1735,7 @@ void SCSP_MidiIn(BYTE val)
 	 * MIDI FIFO critical section
 	 */
 	if (s_multiThreaded)
-		MIDILock->Lock();
+		MIDILock.lock();
 		
 	//DebugLog("Midi Buffer push %02X",val);
 	MidiStack[MidiW++]=val;
@@ -1752,7 +1745,7 @@ void SCSP_MidiIn(BYTE val)
 //	SCSP.data[0x20/2]|=0x8;
 
 	if (s_multiThreaded)
-		MIDILock->Unlock();
+		MIDILock.unlock();
 }
 
 void SCSP_MidiOutW(BYTE val)
@@ -1761,7 +1754,7 @@ void SCSP_MidiOutW(BYTE val)
 	 * MIDI FIFO critical section
 	 */
 	if (s_multiThreaded)
-		MIDILock->Lock();
+		MIDILock.lock();
 
 	//printf("68K: MIDI out\n");
 	//DebugLog("Midi Out Buffer push %02X",val);
@@ -1770,7 +1763,7 @@ void SCSP_MidiOutW(BYTE val)
 	++MidiOutFill;
 
 	if (s_multiThreaded)
-		MIDILock->Unlock();
+		MIDILock.unlock();
 }
 
 
@@ -1785,7 +1778,7 @@ unsigned char SCSP_MidiOutR()
 	 * MIDI FIFO critical section
 	 */
 	if (s_multiThreaded)
-		MIDILock->Lock();
+		MIDILock.lock();
 
 	val=MidiStack[MidiOutR++];
 	//DebugLog("Midi Out Buffer pop %02X",val);
@@ -1793,7 +1786,7 @@ unsigned char SCSP_MidiOutR()
 	--MidiOutFill;
 	
 	if (s_multiThreaded)
-		MIDILock->Unlock();
+		MIDILock.unlock();
 		
 	return val;
 }
@@ -1806,12 +1799,12 @@ unsigned char SCSP_MidiOutFill()
 	 * MIDI FIFO critical section
 	 */
 	if (s_multiThreaded)
-		MIDILock->Lock();
+		MIDILock.lock();
 
 	v = MidiOutFill;
 	
 	if (s_multiThreaded)
-		MIDILock->Unlock();
+		MIDILock.unlock();
 	
 	return v;
 }
@@ -1824,12 +1817,12 @@ unsigned char SCSP_MidiInFill()
 	 * MIDI FIFO critical section
 	 */
 	if (s_multiThreaded)
-		MIDILock->Lock();
+		MIDILock.lock();
 
 	v = MidiInFill;
 	
 	if (s_multiThreaded)
-		MIDILock->Unlock();
+		MIDILock.unlock();
 	
 	return v;
 }
@@ -2144,6 +2137,4 @@ void SCSP_Deinit(void)
 #ifdef USEDSP
 	free(SCSP->MIXBuf);
 #endif
-	delete MIDILock;
-	MIDILock = NULL;
 }

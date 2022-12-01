@@ -1,7 +1,7 @@
 /**
  ** Supermodel
  ** A Sega Model 3 Arcade Emulator.
- ** Copyright 2011 Bart Trzynadlowski, Nik Henson
+ ** Copyright 2003-2022 by The Supermodel Team
  **
  ** This file is part of Supermodel.
  **
@@ -36,13 +36,13 @@
 
 #include "Supermodel.h"
 #include "Input.h"
-#include "OSD/Thread.h"
 
 #include <cmath>
 #include <string>
 #include <algorithm>
 #include <vector>
 #include <sstream>
+#include <thread>
 using namespace std;
 
 #ifdef DEBUG
@@ -1763,7 +1763,7 @@ bool CInputSystem::ReadMapping(char *buffer, unsigned bufSize, bool fullAxisOnly
       {
         if (!Poll())
           goto Cancelled;
-        CThread::Sleep(1000/60);
+        this_thread::sleep_for(chrono::milliseconds(1000 / 60));
       }
       goto Cancelled;
     }
@@ -1798,7 +1798,7 @@ bool CInputSystem::ReadMapping(char *buffer, unsigned bufSize, bool fullAxisOnly
     }
 
     // Don't poll continuously
-    CThread::Sleep(1000/60);
+    this_thread::sleep_for(chrono::milliseconds(1000 / 60));
   }
 
   // Copy mapping to buffer and return
@@ -1887,7 +1887,7 @@ bool CInputSystem::DetectJoystickAxis(unsigned joyNum, unsigned &axisNum, const 
       {
         if (!Poll())
           goto Cancelled;
-        CThread::Sleep(1000/60);
+        this_thread::sleep_for(chrono::milliseconds(1000 / 60));
       }
       goto Cancelled;
     }
@@ -1900,7 +1900,7 @@ bool CInputSystem::DetectJoystickAxis(unsigned joyNum, unsigned &axisNum, const 
       {
         if (!Poll())
           goto Cancelled;
-        CThread::Sleep(1000/60);
+        this_thread::sleep_for(chrono::milliseconds(1000 / 60));
       }
       break;
     }
@@ -1932,7 +1932,7 @@ bool CInputSystem::DetectJoystickAxis(unsigned joyNum, unsigned &axisNum, const 
     }
 
     // Don't poll continuously
-    CThread::Sleep(1000/60);
+    this_thread::sleep_for(chrono::milliseconds(1000 / 60));
   }
 
   maxRange = 0;
@@ -2080,7 +2080,7 @@ Repeat:
         {
           if (!Poll())
             goto Cancelled;
-          CThread::Sleep(1000/60);
+          this_thread::sleep_for(chrono::milliseconds(1000 / 60));
         }
         goto Cancelled;
       }
@@ -2099,7 +2099,7 @@ Repeat:
       }
 
       // Don't poll continuously
-      CThread::Sleep(1000/60);
+      this_thread::sleep_for(chrono::milliseconds(1000 / 60));
     }
 
     printf("Done\n\n");

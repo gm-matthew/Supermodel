@@ -1,8 +1,7 @@
 /**
  ** Supermodel
  ** A Sega Model 3 Arcade Emulator.
- ** Copyright 2011-2021 Bart Trzynadlowski, Nik Henson, Ian Curtis,
- **                     Harry Tuttle, and Spindizzi
+ ** Copyright 2003-2022 by The Supermodel Team
  **
  ** This file is part of Supermodel.
  **
@@ -215,20 +214,10 @@ private:
 
   bool    StartThreads(void);                         // Starts all threads
   bool    StopThreads(void);                          // Stops all threads
-  void    DeleteThreadObjects(void);                  // Deletes all threads and synchronization objects
-
-  static int StartMainBoardThread(void *data);        // Callback to start PPC main board thread
-  static int StartSoundBoardThread(void *data);       // Callback to start sound board thread (unsync'd)
-  static int StartSoundBoardThreadSyncd(void *data);  // Callback to start sound board thread (sync'd)
-  static int StartDriveBoardThread(void *data);       // Callback to start drive board thread
 
   static void AudioCallback(void *data);              // Audio buffer callback
 
-  bool    WakeSoundBoardThread(void);                 // Used by audio callback to wake sound board thread (when not sync'd with render thread)
-  int     RunMainBoardThread(void);                   // Runs PPC main board thread (sync'd in step with render thread)
-  int     RunSoundBoardThread(void);                  // Runs sound board thread (not sync'd in step with render thread, ie running at full speed)
-  int     RunSoundBoardThreadSyncd(void);             // Runs sound board thread (sync'd in step with render thread)
-  int     RunDriveBoardThread(void);                  // Runs drive board thread (sync'd in step with render thread)
+  void    RunSoundBoardThread(void);                  // Runs sound board thread (not sync'd in step with render thread, ie running at full speed)
 
   // Runtime configuration
   Util::Config::Node &m_config;
@@ -281,28 +270,10 @@ private:
   // Multiple threading
   bool        gpusReady;           // True if GPUs are ready to render
   bool        startedThreads;      // True if threads have been created and started
-  bool        pauseThreads;        // True if threads should pause
-  bool        stopThreads;         // True if threads should stop
   bool        syncSndBrdThread;    // True if sound board thread should be sync'd in step with render thread
-  CThread     *ppcBrdThread;       // PPC main board thread
-  CThread     *sndBrdThread;       // Sound board thread
-  CThread     *drvBrdThread;       // Drive board thread
-  bool        ppcBrdThreadRunning; // Flag to indicate PPC main board thread is currently processing
-  bool        ppcBrdThreadDone;    // Flag to indicate PPC main board thread has finished processing
-  bool        sndBrdThreadRunning; // Flag to indicate sound board thread is currently processing
-  bool        sndBrdThreadDone;    // Flag to indicate sound board thread has finished processing
-  bool        sndBrdWakeNotify;    // Flag to indicate that sound board thread has been woken by audio callback (when not sync'd with render thread)
-  bool        drvBrdThreadRunning; // Flag to indicate drive board thread is currently processing
-  bool        drvBrdThreadDone;    // Flag to indicate drive board thread has finished processing
-
-  // Thread synchronization objects
-  CSemaphore  *ppcBrdThreadSync;
-  CSemaphore  *sndBrdThreadSync;
-  CMutex      *sndBrdNotifyLock;
-  CCondVar    *sndBrdNotifySync;
-  CSemaphore  *drvBrdThreadSync;
-  CMutex      *notifyLock;
-  CCondVar    *notifySync;
+  CThread     ppcBrdThread;        // PPC main board thread
+  CThread     sndBrdThread;        // Sound board thread
+  CThread     drvBrdThread;        // Drive board thread
 
   // Frame timings
   FrameTimings timings;

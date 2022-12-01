@@ -1,7 +1,7 @@
 /**
  ** Supermodel
  ** A Sega Model 3 Arcade Emulator.
- ** Copyright 2011 Bart Trzynadlowski, Nik Henson
+ ** Copyright 2003-2022 by The Supermodel Team
  **
  ** This file is part of Supermodel.
  **
@@ -30,213 +30,67 @@
 
 #include "Types.h"
 
-#include <string>
-
-class CSemaphore;
-class CMutex;
-class CCondVar;
-
-typedef int (*ThreadStart)(void *startParam);
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <functional>
 
 /*
  * CThread
- * 
+ *
  * Class that represents an O/S thread.
  */
 class CThread
 {
 private:
-  const std::string m_name;
-	void *m_impl;
+	std::thread m_thread;
+	std::mutex m_mtx;
+	std::condition_variable m_cv;
 
-	CThread(const std::string &name, void *impl);
+	bool m_signal = false;
+	bool m_busy = false;
+	bool m_destroy = false;
+
+	void ThreadLoop(std::function<void()> callback);
 
 public:
-	/*
-	 * Sleep
-	 *
-	 * Sleeps for specified number of milliseconds.
-	 */
-	static void Sleep(UINT32 ms);
-	
 	/*
 	 * GetTicks
 	 *
 	 * Gets number of millseconds since beginning of program.
 	 */
 	static UINT32 GetTicks();
-	
-	/*
-   * CreateThread
-	 *
-	 * Creates a new thread with the given ThreadStart callback and start parameter.  The thread starts running immediately.
-	 */
-	static CThread *CreateThread(const std::string &name, ThreadStart start, void *startParam);
-
-	/* 
-	 * CreateSemaphore
-	 * 
-	 * Creates a new semaphore with the given initial starting value.
-	 */
-	static CSemaphore *CreateSemaphore(UINT32 initVal);
-
-	/* 
-	 * CreateCondVar
-	 *
-	 * Creates a new condition variable.
-	 */
-	static CCondVar *CreateCondVar();
 
 	/*
-	 * CreateMutex
+	 * Create()
 	 *
-	 * Creates a new mutex.
+	 * Creates a new thread with the specified callback function.
+	 * Does nothing if the thread has already been created.
 	 */
-	static CMutex *CreateMutex();
-	
-	/*
-	 * GetLastError
-	 *
-	 * Returns the error message for the last error.
-	 */
-	static const char *GetLastError();
+	void Create(std::function<void()> callback);
 
 	/*
-	 * Thread destructor.
+	 * Signal()
+	 *
+	 * Signals the thread to run the callback function.
+	 * Does nothing if the thread is currently busy.
 	 */
-	~CThread();
+	void Signal(void);
 
 	/*
-	 * GetName
+	 * Wait()
 	 *
-	 * Returns the name of this thread.
+	 * Wait until the thread has finished processing.
+	 * Returns immediately if the thread is not currently busy.
 	 */
-  const std::string &GetName() const;
+	void Wait(void);
 
 	/*
-	 * GetId
+	 * Destroy()
 	 *
-	 * Returns the id of this thread.
+	 * Waits for the thread to finish processing and then destroys it.
 	 */
-	UINT32 GetId();
-
-	/*
-	 * Wait
-	 *
-	 * Waits until this thread has exited.
-	 */
-	int Wait();
-};
-
-/*
- * CSemaphore
- *
- * Class that represents a semaphore.
- */
-class CSemaphore
-{
-friend class CThread;
-
-private:
-	void *m_impl;
-	
-	CSemaphore(void *impl);
-
-public:
-	~CSemaphore();
-
-	/*
-	 * GetValue
-	 *
-	 * Returns the current value of this semaphore.
-	 */
-	UINT32 GetValue();
-
-	/*
-	 * Wait
-	 *
-	 * Locks this semaphore and suspends the calling thread if its value is zero.
-	 */
-	bool Wait();
-
-	/*
-	 * Post
-	 *
-	 * Unlocks this semaphore and resumes any threads that were blocked on it.
-	 */
-	bool Post();
-};
-
-/*
- * CCondVar
- *
- * Class that represents a condition variable.
- */
-class CCondVar
-{
-friend class CThread;
-
-private:
-	void *m_impl;
-
-	CCondVar(void *impl);
-
-public:
-	~CCondVar();
-
-	/*
-	 * Wait
-	 *
-	 * Waits on this condition variable and unlocks the provided mutex (which must be locked before calling this method).
-	 */
-	bool Wait(CMutex *mutex);
-
-	/*
-	 * Signal
-	 *
-	 * Restarts a single thread that is waiting on this condition variable.
-	 */
-	bool Signal();
-
-	/*
-	 * SignalAll
-	 *
-	 * Restarts all threads that are waiting on this condition variable.
-	 */
-	bool SignalAll();
-};
-
-/*
- * CSemaphore
- *
- * Class that represents a mutex.
- */
-class CMutex
-{
-friend class CThread;
-friend class CCondVar;
-
-private:
-	void *m_impl;
-
-	CMutex(void *impl);
-
-public:
-	~CMutex();
-
-	/*
-	 * Lock
-	 *
-	 * Locks this mutex.  If it is already locked then the calling thread will suspend until it is unlocked.
-	 */
-	bool Lock();
-
-	/*
-	 * Unlock
-	 *
-     * Unlocks this mutex.  
-	 */
-	bool Unlock();
+	void Destroy(void);
 };
 
 #endif	// INCLUDED_THREADS_H

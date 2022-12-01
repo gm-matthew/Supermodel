@@ -1,7 +1,7 @@
 /**
  ** Supermodel
  ** A Sega Model 3 Arcade Emulator.
- ** Copyright 2011 Bart Trzynadlowski, Nik Henson
+ ** Copyright 2003-2022 by The Supermodel Team
  **
  ** This file is part of Supermodel.
  **
@@ -47,7 +47,8 @@
 #endif // DEBUGGER_HASBLOCKFILE
 
 #ifdef DEBUGGER_HASTHREAD
-#include "OSD/Thread.h"
+#include <mutex>
+#include <condition_variable>
 #endif // DEBUGGER_HASTHREAD
 
 #define MAX_EXCEPTIONS 255
@@ -121,8 +122,8 @@ namespace Debugger
 		UINT32 m_mem64OrMask;
 
 #ifdef DEBUGGER_HASTHREAD
-		CMutex *m_mutex;
-		CCondVar *m_condVar;
+		std::recursive_mutex m_mutex;
+		std::condition_variable_any m_condVar;
 #endif // DEBUGGER_HASTHREAD
 
 		CException *m_exArray[MAX_EXCEPTIONS];

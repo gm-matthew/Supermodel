@@ -1,7 +1,7 @@
 /**
  ** Supermodel
  ** A Sega Model 3 Arcade Emulator.
- ** Copyright 2011 Bart Trzynadlowski, Nik Henson
+ ** Copyright 2003-2022 by The Supermodel Team
  **
  ** This file is part of Supermodel.
  **
@@ -133,7 +133,6 @@ namespace Debugger
 		frameCount(0), logDebug(true), logInfo(true), logError(true)
 	{ 
 #ifdef DEBUGGER_HASTHREAD
-		m_mutex = CThread::CreateMutex();
 		m_primaryCPU = NULL;
 #endif // DEBUGGER_HASTHREAD
 	}
@@ -215,13 +214,14 @@ namespace Debugger
 #ifdef DEBUGGER_HASTHREAD
 	bool CDebugger::MakePrimary(CCPUDebug *cpu)
 	{
-		m_mutex->Lock();
+		bool isPrimary;
+		{
+			std::lock_guard<std::mutex> lk(m_mutex);
 
-		bool isPrimary = m_primaryCPU == NULL || m_primaryCPU == cpu;
-		if (isPrimary)
-			m_primaryCPU = cpu;
-		
-		m_mutex->Unlock();
+			isPrimary = m_primaryCPU == NULL || m_primaryCPU == cpu;
+			if (isPrimary)
+				m_primaryCPU = cpu;
+		}
 		
 		if (isPrimary)
 		{
@@ -242,7 +242,7 @@ namespace Debugger
 
 	void CDebugger::ReleasePrimary()
 	{
-		m_mutex->Lock();
+		std::lock_guard<std::mutex> lk(m_mutex);
 
 		m_primaryCPU = NULL;
 
@@ -253,8 +253,6 @@ namespace Debugger
 			else 
 				(*it)->ClearWait();
 		}
-
-		m_mutex->Unlock();
 	}
 #endif // DEBUGGER_HASTHREAD
 

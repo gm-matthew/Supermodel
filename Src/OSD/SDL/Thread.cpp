@@ -1,7 +1,7 @@
 /**
  ** Supermodel
  ** A Sega Model 3 Arcade Emulator.
- ** Copyright 2011 Bart Trzynadlowski, Nik Henson
+ ** Copyright 2003-2022 by The Supermodel Team
  **
  ** This file is part of Supermodel.
  **
@@ -27,12 +27,39 @@
 
 #include "Thread.h"
 
-#include "Supermodel.h"
 #include "SDLIncludes.h"
 
-void CThread::Sleep(UINT32 ms)
+void CThread::ThreadLoop(std::function<void()> callback)
 {
-	SDL_Delay(ms);
+	while (true)
+	{
+		// Wait until Signal() or Destroy() is called
+		std::unique_lock<std::mutex> lk(m_mtx);
+		m_cv.wait(lk, [this] {return m_signal || m_destroy; });
+
+		// If Destroy() called, exit the loop
+		if (m_destroy)
+			break;
+
+		// Let the main thread know we are busy
+		m_busy = true;
+
+		lk.unlock();
+
+		// Run the callback function!
+		callback();
+
+		lk.lock();
+
+		// Finished; no longer busy, reset signal
+		m_busy = false;
+		m_signal = false;
+
+		lk.unlock();
+
+		// Notify the main thread that we are done
+		m_cv.notify_one();
+	}
 }
 
 UINT32 CThread::GetTicks()
@@ -40,146 +67,48 @@ UINT32 CThread::GetTicks()
 	return SDL_GetTicks();
 }
 
-CThread *CThread::CreateThread(const std::string &name, ThreadStart start, void *startParam)
+void CThread::Create(std::function<void()> callback)
 {
-	SDL_Thread *impl = SDL_CreateThread(start, name.c_str(), startParam);
-	if (impl == NULL)
-		return NULL;
-	return new CThread(name, impl);
+	// Create the thread if it hasn't already been created
+	if (!m_thread.joinable())
+		m_thread = std::thread(&CThread::ThreadLoop, this, callback);
 }
 
-CSemaphore *CThread::CreateSemaphore(UINT32 initVal)
+void CThread::Signal(void)
 {
-	SDL_sem *impl = SDL_CreateSemaphore(initVal);
-	if (impl == NULL)
-		return NULL;
-	return new CSemaphore(impl);
+	{
+		std::lock_guard<std::mutex> lk(m_mtx);
+
+		// If the thread is busy, do nothing
+		if (m_busy)
+			return;
+
+		// Signal the thread to run the callback function
+		m_signal = true;
+	}
+
+	m_cv.notify_one();
 }
 
-CCondVar *CThread::CreateCondVar()
+void CThread::Wait(void)
 {
-	SDL_cond *impl = SDL_CreateCond();
-	if (impl == NULL)
-		return NULL;
-	return new CCondVar(impl);
+	// Wait for the thread to return from the callback function
+	std::unique_lock<std::mutex> lk(m_mtx);
+	m_cv.wait(lk, [this] {return !m_busy; });
 }
 
-CMutex *CThread::CreateMutex()
+void CThread::Destroy(void)
 {
-	SDL_mutex *impl = SDL_CreateMutex();
-	if (impl == NULL)
-		return NULL;
-	return new CMutex(impl);
-}
+	{
+		std::unique_lock<std::mutex> lk(m_mtx);
+		m_cv.wait(lk, [this] {return !m_busy; });
 
-const char *CThread::GetLastError()
-{
-	return SDL_GetError();
-}
+		m_destroy = true;
+	}
 
-CThread::CThread(const std::string &name, void *impl)
-  : m_name(name),
-    m_impl(impl)
+	m_cv.notify_one();
 
-{
-	//
-}
-
-CThread::~CThread()
-{
-  // User should have called Wait() before thread object is destroyed
-  if (nullptr != m_impl)
-  {
-    ErrorLog("Runaway thread error. A thread was not properly halted: %s\n", GetName().c_str());
-  }
-}
-
-const std::string &CThread::GetName() const
-{
-  return m_name;
-}
-
-UINT32 CThread::GetId()
-{
-	return SDL_GetThreadID((SDL_Thread*)m_impl);
-}
-
-int CThread::Wait()
-{
-	int status;
-	if (m_impl == NULL)
-		return -1;
-	SDL_WaitThread((SDL_Thread*)m_impl, &status);
-	m_impl = NULL;
-	return status;
-}
-
-CSemaphore::CSemaphore(void *impl) : m_impl(impl)
-{
-	//
-}
-
-CSemaphore::~CSemaphore()
-{
-	SDL_DestroySemaphore((SDL_sem*)m_impl);
-}
-
-UINT32 CSemaphore::GetValue()
-{
-	return SDL_SemValue((SDL_sem*)m_impl);
-}
-
-bool CSemaphore::Wait()
-{
-	return SDL_SemWait((SDL_sem*)m_impl) == 0;
-}
-
-bool CSemaphore::Post()
-{
-	return SDL_SemPost((SDL_sem*)m_impl) == 0;
-}
-
-CCondVar::CCondVar(void *impl) : m_impl(impl)
-{
-	//
-}
-
-CCondVar::~CCondVar()
-{
-	SDL_DestroyCond((SDL_cond*)m_impl);
-}
-
-bool CCondVar::Wait(CMutex *mutex)
-{
-	return SDL_CondWait((SDL_cond*)m_impl, (SDL_mutex*)mutex->m_impl) == 0;
-}
-
-bool CCondVar::Signal()
-{
-	return SDL_CondSignal((SDL_cond*)m_impl) == 0;
-}
-
-bool CCondVar::SignalAll()
-{
-	return SDL_CondBroadcast((SDL_cond*)m_impl) == 0;
-}
-
-CMutex::CMutex(void *impl) : m_impl(impl)
-{
-	//
-}
-
-CMutex::~CMutex()
-{
-	SDL_DestroyMutex((SDL_mutex*)m_impl);
-}
-
-bool CMutex::Lock()
-{
-	return SDL_mutexP((SDL_mutex*)m_impl) == 0;
-}
-
-bool CMutex::Unlock()
-{
-	return SDL_mutexV((SDL_mutex*)m_impl) == 0;
+	// Wait for the thread to end
+	if (m_thread.joinable())
+		m_thread.join();
 }

@@ -1,7 +1,7 @@
 /**
  ** Supermodel
  ** A Sega Model 3 Arcade Emulator.
- ** Copyright 2011 Bart Trzynadlowski, Nik Henson
+ ** Copyright 2003-2022 by The Supermodel Team
  **
  ** This file is part of Supermodel.
  **
@@ -55,8 +55,6 @@ namespace Debugger
 
 #ifdef DEBUGGER_HASTHREAD
 		m_breakWait = false;
-		m_mutex = CThread::CreateMutex();
-		m_condVar = CThread::CreateCondVar();
 #endif // DEBUGGER_HASTHREAD
 	}
 
@@ -1458,12 +1456,12 @@ namespace Debugger
 	void CCPUDebug::CPUActive()
 	{
 #ifdef DEBUGGER_HASTHREAD
-		m_mutex->Lock();
+		{
+			std::lock_guard<std::recursive_mutex> lk(m_mutex);
+			active = true;
+		}
 
-		active = true;
-		m_condVar->Signal();
-
-		m_mutex->Unlock();
+		m_condVar.notify_one();
 #else
 		active = true;
 #endif // DEBUGGER_HASTHREAD
@@ -1472,12 +1470,12 @@ namespace Debugger
 	void CCPUDebug::CPUInactive()
 	{
 #ifdef DEBUGGER_HASTHREAD
-		m_mutex->Lock();
+		{
+			std::lock_guard<std::recursive_mutex> lk(m_mutex);
+			active = false;
+		}
 
-		active = false;
-		m_condVar->Signal();
-
-		m_mutex->Unlock();
+		m_condVar.notify_one();
 #else
 		active = false;
 #endif // DEBUGGER_HASTHREAD
@@ -1486,32 +1484,31 @@ namespace Debugger
 	void CCPUDebug::WaitCommand(EHaltReason reason)
 	{
 #ifdef DEBUGGER_HASTHREAD
-		m_mutex->Lock();
-
-		m_halted = true;
-		m_condVar->Signal();
-
-		if (debugger->MakePrimary(this))
 		{
-			if (reason != HaltNone)
-				debugger->ExecutionHalted(this, reason);
-			debugger->WaitCommand(this);
+			std::unique_lock<std::recursive_mutex> lk(m_mutex);
+			m_halted = true;
+			m_condVar.notify_one();
 
-			if (!m_stateUpdated)
-				debugger->ReleasePrimary();
+			if (debugger->MakePrimary(this))
+			{
+				if (reason != HaltNone)
+					debugger->ExecutionHalted(this, reason);
+				debugger->WaitCommand(this);
+
+				if (!m_stateUpdated)
+					debugger->ReleasePrimary();
+			}
+			else
+			{
+				if (reason != HaltNone)
+					debugger->ExecutionHalted(this, reason);
+				while (m_breakWait)
+					m_condVar.wait(lk);
+			}
+
+			m_halted = false;
 		}
-		else
-		{
-			if (reason != HaltNone)
-				debugger->ExecutionHalted(this, reason);
-			while (m_breakWait)
-				m_condVar->Wait(m_mutex);
-		}
-
-		m_halted = false;
-		m_condVar->Signal();
-
-		m_mutex->Unlock();
+		m_condVar.notify_one();
 #else
 		if (reason != HaltNone)
 			debugger->ExecutionHalted(this, reason);
@@ -1524,35 +1521,32 @@ namespace Debugger
 #ifdef DEBUGGER_HASTHREAD
 	void CCPUDebug::ForceWait()
 	{
-		m_mutex->Lock();
-
-		m_breakWait = true;
-		m_break = true;
-		UpdateExecMasks();
-		m_condVar->Signal();
-
-		m_mutex->Unlock();
+		{
+			std::lock_guard<std::recursive_mutex> lk(m_mutex);
+			m_breakWait = true;
+			m_break = true;
+			UpdateExecMasks();
+		}
+		m_condVar.notify_one();
 	}
 
 	void CCPUDebug::WaitForHalt()
 	{
-		m_mutex->Lock();
+		std::unique_lock<std::recursive_mutex> lk(m_mutex);
 			
 		// Wait for CPU to become inactive or halt
 		while (active && !m_halted)
-			m_condVar->Wait(m_mutex);
-		
-		m_mutex->Unlock();
+			//m_condVar->Wait(m_mutex);
+			m_condVar.wait(lk);
 	}
 
 	void CCPUDebug::ClearWait()
 	{
-		m_mutex->Lock();
-		
-		ClearBreak();
-		m_condVar->Signal();
-
-		m_mutex->Unlock();
+		{
+			std::lock_guard<std::recursive_mutex> lk(m_mutex);
+			ClearBreak();
+		}
+		m_condVar.notify_one();
 	}
 #endif // DEBUGGER_HASTHREAD
 
